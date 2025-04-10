@@ -2,7 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  output: 'export',
+  images: {
+    unoptimized: true,
+  },
   basePath: process.env.NODE_ENV === 'production' ? '/ai-quizs' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/ai-quizs/' : '',
 };
 
 module.exports = nextConfig; 

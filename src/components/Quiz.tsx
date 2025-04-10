@@ -1,384 +1,248 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { QuizState, Question } from '../types/quiz';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Question } from '../types/quiz';
 import { questions } from '../data/quizData';
-import * as htmlToImage from 'html-to-image';
 import FrequentlyMissed from './FrequentlyMissed';
 
-interface ScoreHistory {
-  date: string;
-  score: number;
-  totalQuestions: number;
-  percentage: number;
-}
-
-interface ShuffledOptions {
-  options: string[];
-  correctIndex: number;
-}
-
-interface ShuffledQuestion {
-  question: Question;
+interface ShuffledQuestion extends Question {
   shuffledOptions: string[];
   correctIndex: number;
 }
 
-export default function Quiz() {
+interface QuizState {
+  currentQuestionIndex: number;
+  score: number;
+  selectedAnswers: number[];
+  showResults: boolean;
+}
+
+export const Quiz: React.FC = () => {
+  const [isClient, setIsClient] = useState(false);
   const [state, setState] = useState<QuizState>({
     currentQuestionIndex: 0,
     score: 0,
-    answers: [],
-    showResults: false,
+    selectedAnswers: [],
+    showResults: false
   });
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
-  const [isClient, setIsClient] = useState(false);
-  const [shuffledQuestions, setShuffledQuestions] = useState<ShuffledQuestion[]>([]);
   const [incorrectAnswers, setIncorrectAnswers] = useState<{ [key: number]: number }>({});
   const [activeTab, setActiveTab] = useState<'quiz' | 'history' | 'missed'>('quiz');
-  const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
-  
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const [scoreHistory, setScoreHistory] = useState<number[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<ShuffledQuestion[]>([]);
 
-  useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem('quizScoreHistory');
-    if (saved) {
-      setScoreHistory(JSON.parse(saved));
-    }
-    const storedIncorrect = localStorage.getItem('incorrectAnswers');
-    if (storedIncorrect) {
-      setIncorrectAnswers(JSON.parse(storedIncorrect));
-    }
-  }, []);
-
-  const shuffleArray = <T,>(array: T[]): T[] => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  const startNewQuiz = () => {
-    // Shuffle all 70 questions and take the first 15
-    const selectedQuestions = shuffleArray(questions).slice(0, 15);
-    
-    // Shuffle options for each question
-    const shuffledQs = selectedQuestions.map(question => {
-      const options = [...question.options];
-      const correctOption = options[question.correctAnswer];
-      const shuffledOptions = shuffleArray(options);
-      const newCorrectIndex = shuffledOptions.indexOf(correctOption);
-      
-      return {
-        question,
-        shuffledOptions,
-        correctIndex: newCorrectIndex
-      };
-    });
-    
-    setShuffledQuestions(shuffledQs);
+  const startNewQuiz = useCallback(() => {
+    // Shuffle questions and select first 15
+    const shuffled = [...questions]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 15)
+      .map(q => {
+        const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+        const correctIndex = shuffledOptions.indexOf(q.options[q.correctAnswer]);
+        return {
+          ...q,
+          shuffledOptions,
+          correctIndex
+        };
+      });
+    setQuizQuestions(shuffled);
     setState({
       currentQuestionIndex: 0,
       score: 0,
-      answers: [],
-      showResults: false,
+      selectedAnswers: [],
+      showResults: false
     });
-    setSelectedAnswer(null);
-    setShowFeedback(false);
-  };
-
-  useEffect(() => {
-    startNewQuiz();
   }, []);
 
   useEffect(() => {
-    if (isClient) {
-      localStorage.setItem('quizScoreHistory', JSON.stringify(scoreHistory));
-      localStorage.setItem('incorrectAnswers', JSON.stringify(incorrectAnswers));
+    setIsClient(true);
+    const savedHistory = localStorage.getItem('scoreHistory');
+    if (savedHistory) {
+      setScoreHistory(JSON.parse(savedHistory));
     }
-  }, [scoreHistory, incorrectAnswers, isClient]);
+    const savedIncorrect = localStorage.getItem('incorrectAnswers');
+    if (savedIncorrect) {
+      setIncorrectAnswers(JSON.parse(savedIncorrect));
+    }
+    startNewQuiz();
+  }, [startNewQuiz]);
 
-  const currentQuestion = shuffledQuestions[state.currentQuestionIndex];
+  const handleAnswerSelect = (answerIndex: number) => {
+    const currentQuestion = quizQuestions[state.currentQuestionIndex];
+    const isCorrect = answerIndex === currentQuestion.correctIndex;
+    
+    const newSelectedAnswers = [...state.selectedAnswers, answerIndex];
+    const newScore = isCorrect ? state.score + 1 : state.score;
+    
+    if (!isCorrect) {
+      setIncorrectAnswers(prev => {
+        const newIncorrect = { ...prev, [currentQuestion.id]: (prev[currentQuestion.id] || 0) + 1 };
+        if (isClient) {
+          localStorage.setItem('incorrectAnswers', JSON.stringify(newIncorrect));
+        }
+        return newIncorrect;
+      });
+    }
 
-  const handleAnswer = (selectedOption: number) => {
-    setSelectedAnswer(selectedOption);
-    setShowFeedback(true);
-    const isCorrect = selectedOption === currentQuestion.correctIndex;
-    if (isCorrect) {
+    if (state.currentQuestionIndex < quizQuestions.length - 1) {
       setState(prev => ({
         ...prev,
-        score: prev.score + 1,
+        currentQuestionIndex: prev.currentQuestionIndex + 1,
+        score: newScore,
+        selectedAnswers: newSelectedAnswers
       }));
-    }
-
-    if (!isCorrect) {
-      setIncorrectAnswers(prev => ({
-        ...prev,
-        [currentQuestion.question.id]: (prev[currentQuestion.question.id] || 0) + 1
-      }));
-    }
-  };
-
-  const handleNextQuestion = () => {
-    const newAnswers = [...state.answers, selectedAnswer!];
-    
-    if (state.currentQuestionIndex === shuffledQuestions.length - 1) {
-      const newScore: ScoreHistory = {
-        date: new Date().toLocaleString(),
-        score: state.score,
-        totalQuestions: shuffledQuestions.length,
-        percentage: (state.score / shuffledQuestions.length) * 100
-      };
-      
-      const newHistory = [...scoreHistory, newScore];
-      setScoreHistory(newHistory);
-      if (isClient) {
-        localStorage.setItem('quizScoreHistory', JSON.stringify(newHistory));
-      }
-      
-      setState({
-        ...state,
-        answers: newAnswers,
-        showResults: true,
-      });
     } else {
-      setState({
-        ...state,
-        currentQuestionIndex: state.currentQuestionIndex + 1,
-        answers: newAnswers,
-      });
-    }
-    setSelectedAnswer(null);
-    setShowFeedback(false);
-  };
-
-  const saveScreenshot = async () => {
-    if (resultsRef.current) {
-      try {
-        const dataUrl = await htmlToImage.toPng(resultsRef.current);
-        const link = document.createElement('a');
-        link.download = `quiz-results-${new Date().toISOString().slice(0, 10)}.png`;
-        link.href = dataUrl;
-        link.click();
-      } catch (error) {
-        console.error('Error saving screenshot:', error);
+      const finalScore = newScore + (isCorrect ? 1 : 0);
+      const newScoreHistory = [...scoreHistory, finalScore];
+      setScoreHistory(newScoreHistory);
+      if (isClient) {
+        localStorage.setItem('scoreHistory', JSON.stringify(newScoreHistory));
       }
+      setState(prev => ({
+        ...prev,
+        score: finalScore,
+        selectedAnswers: newSelectedAnswers,
+        showResults: true
+      }));
     }
   };
 
-  const getScoreMessage = (percentage: number) => {
-    if (percentage >= 90) return "Excellent! You're an AI/ML expert! 🏆";
-    if (percentage >= 70) return "Great job! You have solid knowledge! 🌟";
-    if (percentage >= 50) return "Good effort! Keep learning! 📚";
-    return "Keep studying! You'll improve! 💪";
-  };
-
-  const getFrequentlyMissed = () => {
+  const getFrequentlyMissedQuestions = () => {
     const missedQuestions = Object.entries(incorrectAnswers)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
       .map(([id, count]) => {
         const question = questions.find(q => q.id === parseInt(id));
         return question ? { question, count } : null;
       })
-      .filter((item): item is { question: Question; count: number } => item !== null)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // Show top 5 most frequently missed
+      .filter((q): q is { question: Question; count: number } => q !== null);
 
     return missedQuestions;
   };
 
-  if (state.showResults) {
-    const percentage = (state.score / shuffledQuestions.length) * 100;
-    return (
-      <div className="max-w-3xl mx-auto">
-        <div ref={resultsRef} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <h2 className="text-3xl font-semibold text-gray-900 mb-6">Quiz Results</h2>
-          <div className="mb-8">
-            <p className="text-2xl mb-3 text-gray-900">Your score: {state.score} out of {shuffledQuestions.length}</p>
-            <p className="text-4xl font-semibold text-blue-600 mb-4">{percentage.toFixed(1)}%</p>
-            <p className="text-xl text-gray-600">{getScoreMessage(percentage)}</p>
-          </div>
-          
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Score History</h3>
-            <div className="space-y-3">
-              {scoreHistory.slice(-5).map((history, index) => (
-                <div key={index} className="flex justify-between items-center border-b border-gray-100 pb-3">
-                  <span className="text-gray-600">{history.date}</span>
-                  <span className="font-medium text-gray-900">{history.score}/{history.totalQuestions} ({history.percentage.toFixed(1)}%)</span>
-                </div>
-              ))}
-            </div>
-          </div>
+  if (!isClient) {
+    return null;
+  }
 
-          <div className="space-y-6">
-            {shuffledQuestions.map((question, index) => (
-              <div key={question.question.id} className="border border-gray-100 rounded-xl p-6 hover:shadow-sm transition-shadow">
-                <p className="font-semibold text-gray-900 mb-3">{question.question.question}</p>
-                <p className="text-green-600 font-medium mb-3">Correct answer: {question.question.options[question.correctIndex]}</p>
-                {state.answers[index] !== question.correctIndex && (
-                  <div className="mt-3">
-                    <p className="text-red-600 font-medium mb-2">Your answer: {question.shuffledOptions[state.answers[index]]}</p>
-                    <p className="text-gray-600 mb-2">{question.question.explanation}</p>
-                    <a href={question.question.reference} target="_blank" rel="noopener noreferrer" 
-                       className="text-blue-600 hover:text-blue-800 transition-colors">
-                      Learn more
-                    </a>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+  if (activeTab === 'history') {
+    return (
+      <div className="max-w-2xl mx-auto p-6">
+        <h2 className="text-2xl font-bold mb-4">Score History</h2>
+        <div className="space-y-2">
+          {scoreHistory.map((score, index) => (
+            <div key={index} className="p-4 bg-white rounded-lg shadow">
+              Attempt {index + 1}: {score} correct answers
+            </div>
+          ))}
         </div>
-        
-        <div className="mt-8 flex gap-4">
+        <button
+          onClick={() => setActiveTab('quiz')}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Back to Quiz
+        </button>
+      </div>
+    );
+  }
+
+  if (activeTab === 'missed') {
+    return (
+      <div className="max-w-2xl mx-auto p-6">
+        <FrequentlyMissed frequentlyMissed={getFrequentlyMissedQuestions()} />
+        <button
+          onClick={() => setActiveTab('quiz')}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Back to Quiz
+        </button>
+      </div>
+    );
+  }
+
+  if (state.showResults) {
+    return (
+      <div className="max-w-2xl mx-auto p-6">
+        <h2 className="text-2xl font-bold mb-4">Quiz Results</h2>
+        <p className="text-lg mb-4">Your score: {state.score} out of {quizQuestions.length}</p>
+        <div className="space-y-4">
+          {quizQuestions.map((question, index) => (
+            <div key={question.id} className="p-4 bg-white rounded-lg shadow">
+              <p className="font-semibold">{question.question}</p>
+              <p className={`mt-2 ${state.selectedAnswers[index] === question.correctIndex ? 'text-green-600' : 'text-red-600'}`}>
+                Your answer: {question.shuffledOptions[state.selectedAnswers[index]]}
+              </p>
+              <p className="text-green-600">Correct answer: {question.options[question.correctAnswer]}</p>
+              <p className="text-gray-600 mt-2">{question.explanation}</p>
+              <a href={question.reference} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                Learn more
+              </a>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 space-x-4">
           <button
             onClick={startNewQuiz}
-            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium"
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             Try Again
           </button>
           <button
-            onClick={saveScreenshot}
-            className="flex-1 px-6 py-3 bg-gray-100 text-gray-900 rounded-full hover:bg-gray-200 transition-colors font-medium"
+            onClick={() => setActiveTab('missed')}
+            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
           >
-            Save Results
+            View Missed Problems
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            View History
           </button>
         </div>
       </div>
     );
   }
 
-  if (!currentQuestion) {
-    return <div>Loading...</div>;
-  }
+  const currentQuestion = quizQuestions[state.currentQuestionIndex];
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8">
-        <div className="flex space-x-2 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('quiz')}
-            className={`px-6 py-3 font-medium text-sm rounded-t-lg transition-colors ${
-              activeTab === 'quiz'
-                ? 'bg-white text-blue-600 border-t border-l border-r border-gray-200'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Quiz
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`px-6 py-3 font-medium text-sm rounded-t-lg transition-colors ${
-              activeTab === 'history'
-                ? 'bg-white text-blue-600 border-t border-l border-r border-gray-200'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            History
-          </button>
-          <button
-            onClick={() => setActiveTab('missed')}
-            className={`px-6 py-3 font-medium text-sm rounded-t-lg transition-colors ${
-              activeTab === 'missed'
-                ? 'bg-white text-blue-600 border-t border-l border-r border-gray-200'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Missed Problems
-          </button>
+    <div className="max-w-2xl mx-auto p-6">
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold">Question {state.currentQuestionIndex + 1} of {quizQuestions.length}</h2>
+        <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+          <div
+            className="bg-blue-600 h-2.5 rounded-full"
+            style={{ width: `${((state.currentQuestionIndex + 1) / quizQuestions.length) * 100}%` }}
+          ></div>
         </div>
       </div>
-
-      {activeTab === 'quiz' && (
-        <>
-          <div className="mb-6">
-            <span className="text-sm text-gray-500">
-              Question {state.currentQuestionIndex + 1} of {shuffledQuestions.length}
-            </span>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">{currentQuestion.question.question}</h2>
-            <div className="space-y-3">
-              {currentQuestion.shuffledOptions.map((option: string, index: number) => (
-                <button
-                  key={index}
-                  onClick={() => handleAnswer(index)}
-                  disabled={showFeedback}
-                  className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
-                    showFeedback
-                      ? index === currentQuestion.correctIndex
-                        ? 'bg-green-50 border-green-200 text-green-900'
-                        : index === selectedAnswer
-                        ? 'bg-red-50 border-red-200 text-red-900'
-                        : 'bg-gray-50 border-gray-100 text-gray-600'
-                      : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50 text-gray-900'
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            {showFeedback && (
-              <div className="mt-6 space-y-4">
-                <div className={selectedAnswer === currentQuestion.correctIndex ? 'text-green-600' : 'text-red-600'}>
-                  {selectedAnswer === currentQuestion.correctIndex ? (
-                    <p className="text-lg">{currentQuestion.question.explanation}</p>
-                  ) : (
-                    <>
-                      <p className="text-lg mb-2">{currentQuestion.question.explanation}</p>
-                      <a
-                        href={currentQuestion.question.reference}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 transition-colors inline-block"
-                      >
-                        Learn more
-                      </a>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={handleNextQuestion}
-                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium"
-                >
-                  {state.currentQuestionIndex === shuffledQuestions.length - 1 ? 'Show Results' : 'Next Question'}
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {activeTab === 'history' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">Score History</h2>
-          {scoreHistory.length === 0 ? (
-            <p className="text-gray-500">No history yet</p>
-          ) : (
-            <div className="space-y-4">
-              {scoreHistory.map((history, index) => (
-                <div key={index} className="flex justify-between items-center border-b border-gray-100 pb-3">
-                  <span className="text-gray-600">{history.date}</span>
-                  <span className="font-medium text-gray-900">
-                    {history.score}/{history.totalQuestions} ({history.percentage.toFixed(1)}%)
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <p className="text-lg font-semibold mb-4">{currentQuestion.question}</p>
+        <div className="space-y-3">
+          {currentQuestion.shuffledOptions.map((option, index) => (
+            <button
+              key={index}
+              onClick={() => handleAnswerSelect(index)}
+              className="w-full p-3 text-left border rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {option}
+            </button>
+          ))}
         </div>
-      )}
-
-      {activeTab === 'missed' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <FrequentlyMissed frequentlyMissed={getFrequentlyMissed()} />
-        </div>
-      )}
+      </div>
+      <div className="mt-6 space-x-4">
+        <button
+          onClick={() => setActiveTab('history')}
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        >
+          View History
+        </button>
+        <button
+          onClick={() => setActiveTab('missed')}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+        >
+          View Missed Problems
+        </button>
+      </div>
     </div>
   );
-} 
+}; 

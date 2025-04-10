@@ -8,7 +8,6 @@ interface FrequentlyMissedProps {
 const FrequentlyMissed: React.FC<FrequentlyMissedProps> = ({ frequentlyMissed }) => {
   return (
     <div>
-      <h2 className="text-2xl font-semibold text-gray-900 mb-6">Frequently Missed Problems</h2>
       {frequentlyMissed.length === 0 ? (
         <p className="text-gray-500">No frequently missed problems yet.</p>
       ) : (

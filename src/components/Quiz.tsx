@@ -18,6 +18,12 @@ interface ShuffledOptions {
   correctIndex: number;
 }
 
+interface ShuffledQuestion {
+  question: Question;
+  shuffledOptions: string[];
+  correctIndex: number;
+}
+
 export default function Quiz() {
   const [state, setState] = useState<QuizState>({
     currentQuestionIndex: 0,
@@ -29,7 +35,7 @@ export default function Quiz() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [shuffledOptions, setShuffledOptions] = useState<ShuffledOptions[]>([]);
+  const [shuffledQuestions, setShuffledQuestions] = useState<ShuffledQuestion[]>([]);
   const [incorrectAnswers, setIncorrectAnswers] = useState<{ [key: number]: number }>({});
   const [activeTab, setActiveTab] = useState<'quiz' | 'history' | 'missed'>('quiz');
   const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
@@ -48,26 +54,42 @@ export default function Quiz() {
     }
   }, []);
 
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
   const startNewQuiz = () => {
     // Shuffle all 70 questions and take the first 15
-    const shuffledQuestions = [...questions]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 15);
+    const selectedQuestions = shuffleArray(questions).slice(0, 15);
     
-    setCurrentQuestions(shuffledQuestions);
-    setState(prev => ({
-      ...prev,
+    // Shuffle options for each question
+    const shuffledQs = selectedQuestions.map(question => {
+      const options = [...question.options];
+      const correctOption = options[question.correctAnswer];
+      const shuffledOptions = shuffleArray(options);
+      const newCorrectIndex = shuffledOptions.indexOf(correctOption);
+      
+      return {
+        question,
+        shuffledOptions,
+        correctIndex: newCorrectIndex
+      };
+    });
+    
+    setShuffledQuestions(shuffledQs);
+    setState({
       currentQuestionIndex: 0,
       score: 0,
       answers: [],
       showResults: false,
-    }));
+    });
     setSelectedAnswer(null);
     setShowFeedback(false);
-    setShuffledOptions(shuffledQuestions.map(question => ({
-      options: [...question.options],
-      correctIndex: question.correctAnswer
-    })));
   };
 
   useEffect(() => {
@@ -81,13 +103,12 @@ export default function Quiz() {
     }
   }, [scoreHistory, incorrectAnswers, isClient]);
 
-  const currentQuestion = currentQuestions[state.currentQuestionIndex];
-  const currentShuffled = shuffledOptions[state.currentQuestionIndex];
+  const currentQuestion = shuffledQuestions[state.currentQuestionIndex];
 
   const handleAnswer = (selectedOption: number) => {
     setSelectedAnswer(selectedOption);
     setShowFeedback(true);
-    const isCorrect = selectedOption === currentShuffled.correctIndex;
+    const isCorrect = selectedOption === currentQuestion.correctIndex;
     if (isCorrect) {
       setState(prev => ({
         ...prev,
@@ -98,7 +119,7 @@ export default function Quiz() {
     if (!isCorrect) {
       setIncorrectAnswers(prev => ({
         ...prev,
-        [currentQuestion.id]: (prev[currentQuestion.id] || 0) + 1
+        [currentQuestion.question.id]: (prev[currentQuestion.question.id] || 0) + 1
       }));
     }
   };
@@ -106,12 +127,12 @@ export default function Quiz() {
   const handleNextQuestion = () => {
     const newAnswers = [...state.answers, selectedAnswer!];
     
-    if (state.currentQuestionIndex === currentQuestions.length - 1) {
+    if (state.currentQuestionIndex === shuffledQuestions.length - 1) {
       const newScore: ScoreHistory = {
         date: new Date().toLocaleString(),
         score: state.score,
-        totalQuestions: currentQuestions.length,
-        percentage: (state.score / currentQuestions.length) * 100
+        totalQuestions: shuffledQuestions.length,
+        percentage: (state.score / shuffledQuestions.length) * 100
       };
       
       const newHistory = [...scoreHistory, newScore];
@@ -171,13 +192,13 @@ export default function Quiz() {
   };
 
   if (state.showResults) {
-    const percentage = (state.score / currentQuestions.length) * 100;
+    const percentage = (state.score / shuffledQuestions.length) * 100;
     return (
       <div className="max-w-3xl mx-auto">
         <div ref={resultsRef} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <h2 className="text-3xl font-semibold text-gray-900 mb-6">Quiz Results</h2>
           <div className="mb-8">
-            <p className="text-2xl mb-3 text-gray-900">Your score: {state.score} out of {currentQuestions.length}</p>
+            <p className="text-2xl mb-3 text-gray-900">Your score: {state.score} out of {shuffledQuestions.length}</p>
             <p className="text-4xl font-semibold text-blue-600 mb-4">{percentage.toFixed(1)}%</p>
             <p className="text-xl text-gray-600">{getScoreMessage(percentage)}</p>
           </div>
@@ -195,15 +216,15 @@ export default function Quiz() {
           </div>
 
           <div className="space-y-6">
-            {currentQuestions.map((question, index) => (
-              <div key={question.id} className="border border-gray-100 rounded-xl p-6 hover:shadow-sm transition-shadow">
-                <p className="font-semibold text-gray-900 mb-3">{question.question}</p>
-                <p className="text-green-600 font-medium mb-3">Correct answer: {question.options[question.correctAnswer]}</p>
-                {state.answers[index] !== shuffledOptions[index].correctIndex && (
+            {shuffledQuestions.map((question, index) => (
+              <div key={question.question.id} className="border border-gray-100 rounded-xl p-6 hover:shadow-sm transition-shadow">
+                <p className="font-semibold text-gray-900 mb-3">{question.question.question}</p>
+                <p className="text-green-600 font-medium mb-3">Correct answer: {question.question.options[question.correctIndex]}</p>
+                {state.answers[index] !== question.correctIndex && (
                   <div className="mt-3">
-                    <p className="text-red-600 font-medium mb-2">Your answer: {shuffledOptions[index].options[state.answers[index]]}</p>
-                    <p className="text-gray-600 mb-2">{question.explanation}</p>
-                    <a href={question.reference} target="_blank" rel="noopener noreferrer" 
+                    <p className="text-red-600 font-medium mb-2">Your answer: {question.shuffledOptions[state.answers[index]]}</p>
+                    <p className="text-gray-600 mb-2">{question.question.explanation}</p>
+                    <a href={question.question.reference} target="_blank" rel="noopener noreferrer" 
                        className="text-blue-600 hover:text-blue-800 transition-colors">
                       Learn more
                     </a>
@@ -232,7 +253,7 @@ export default function Quiz() {
     );
   }
 
-  if (!currentShuffled) {
+  if (!currentQuestion) {
     return <div>Loading...</div>;
   }
 
@@ -277,20 +298,20 @@ export default function Quiz() {
         <>
           <div className="mb-6">
             <span className="text-sm text-gray-500">
-              Question {state.currentQuestionIndex + 1} of {currentQuestions.length}
+              Question {state.currentQuestionIndex + 1} of {shuffledQuestions.length}
             </span>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">{currentQuestion.question}</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">{currentQuestion.question.question}</h2>
             <div className="space-y-3">
-              {currentShuffled.options.map((option, index) => (
+              {currentQuestion.shuffledOptions.map((option: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => handleAnswer(index)}
                   disabled={showFeedback}
                   className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
                     showFeedback
-                      ? index === currentShuffled.correctIndex
+                      ? index === currentQuestion.correctIndex
                         ? 'bg-green-50 border-green-200 text-green-900'
                         : index === selectedAnswer
                         ? 'bg-red-50 border-red-200 text-red-900'
@@ -304,14 +325,14 @@ export default function Quiz() {
             </div>
             {showFeedback && (
               <div className="mt-6 space-y-4">
-                <div className={selectedAnswer === currentShuffled.correctIndex ? 'text-green-600' : 'text-red-600'}>
-                  {selectedAnswer === currentShuffled.correctIndex ? (
-                    <p className="text-lg">{currentQuestion.explanation}</p>
+                <div className={selectedAnswer === currentQuestion.correctIndex ? 'text-green-600' : 'text-red-600'}>
+                  {selectedAnswer === currentQuestion.correctIndex ? (
+                    <p className="text-lg">{currentQuestion.question.explanation}</p>
                   ) : (
                     <>
-                      <p className="text-lg mb-2">{currentQuestion.explanation}</p>
+                      <p className="text-lg mb-2">{currentQuestion.question.explanation}</p>
                       <a
-                        href={currentQuestion.reference}
+                        href={currentQuestion.question.reference}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 transition-colors inline-block"
@@ -325,7 +346,7 @@ export default function Quiz() {
                   onClick={handleNextQuestion}
                   className="w-full px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium"
                 >
-                  {state.currentQuestionIndex === currentQuestions.length - 1 ? 'Show Results' : 'Next Question'}
+                  {state.currentQuestionIndex === shuffledQuestions.length - 1 ? 'Show Results' : 'Next Question'}
                 </button>
               </div>
             )}

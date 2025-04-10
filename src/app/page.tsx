@@ -1,17 +1,16 @@
-import Quiz from '../components/Quiz';
+import Link from 'next/link';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-center mb-8">
-          Machine Learning & AI Quiz
-        </h1>
-        <p className="text-center text-gray-600 mb-8">
-          Test your knowledge of Machine Learning and Artificial Intelligence concepts.
-          Get instant feedback and learn from detailed explanations with references.
-        </p>
-        <Quiz />
+    <main className="flex min-h-screen flex-col items-center justify-center p-24">
+      <h1 className="text-4xl font-bold mb-8">AI Quiz App</h1>
+      <div className="grid grid-cols-1 gap-4">
+        <Link 
+          href="/quiz" 
+          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          Start Quiz
+        </Link>
       </div>
     </main>
   );

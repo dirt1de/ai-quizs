@@ -1,4 +1,4 @@
-import Quiz from '../../components/Quiz';
+import { Quiz } from '../../components/Quiz';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 
 export default function QuizPage() {

@@ -23,6 +23,12 @@ interface QuizState {
 
 type TabType = 'quiz' | 'history' | 'missed';
 
+const TABS: Record<'QUIZ' | 'HISTORY' | 'MISSED', TabType> = {
+  QUIZ: 'quiz',
+  HISTORY: 'history',
+  MISSED: 'missed'
+} as const;
+
 export const Quiz: React.FC = () => {
   const [isClient, setIsClient] = useState(false);
   const [quizState, setQuizState] = useState<QuizState>({
@@ -36,7 +42,7 @@ export const Quiz: React.FC = () => {
     selectedAnswer: null
   });
   const [incorrectAnswers, setIncorrectAnswers] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<TabType>('quiz');
+  const [activeTab, setActiveTab] = useState<TabType>(TABS.QUIZ);
   const [scoreHistory, setScoreHistory] = useState<number[]>([]);
 
   const startNewQuiz = useCallback(() => {
@@ -144,13 +150,13 @@ export const Quiz: React.FC = () => {
     return null;
   }
 
-  if (activeTab === 'history') {
+  if (activeTab === TABS.HISTORY) {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">Score History</h2>
           <button
-            onClick={() => setActiveTab('quiz')}
+            onClick={() => setActiveTab(TABS.QUIZ)}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             Back to Quiz
@@ -167,13 +173,13 @@ export const Quiz: React.FC = () => {
     );
   }
 
-  if (activeTab === 'missed') {
+  if (activeTab === TABS.MISSED) {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">Frequently Missed Problems</h2>
           <button
-            onClick={() => setActiveTab('quiz')}
+            onClick={() => setActiveTab(TABS.QUIZ)}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             Back to Quiz
@@ -212,13 +218,13 @@ export const Quiz: React.FC = () => {
             Try Again
           </button>
           <button
-            onClick={() => setActiveTab('missed')}
+            onClick={() => setActiveTab(TABS.MISSED)}
             className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
           >
             View Missed Problems
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => setActiveTab(TABS.HISTORY)}
             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
             View History
@@ -236,35 +242,32 @@ export const Quiz: React.FC = () => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             <button
-              onClick={() => setActiveTab('quiz')}
+              onClick={() => setActiveTab(TABS.QUIZ)}
               className={`${
-                activeTab === 'quiz'
+                activeTab === TABS.QUIZ
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              aria-current={activeTab === 'quiz' ? 'page' : undefined}
             >
               Quiz
             </button>
             <button
-              onClick={() => setActiveTab('history')}
+              onClick={() => setActiveTab(TABS.HISTORY)}
               className={`${
-                activeTab === 'history'
+                activeTab === TABS.HISTORY
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              aria-current={activeTab === 'history' ? 'page' : undefined}
             >
               Score History
             </button>
             <button
-              onClick={() => setActiveTab('missed')}
+              onClick={() => setActiveTab(TABS.MISSED)}
               className={`${
-                activeTab === 'missed'
+                activeTab === TABS.MISSED
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              aria-current={activeTab === 'missed' ? 'page' : undefined}
             >
               Missed Problems
             </button>
